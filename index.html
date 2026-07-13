@@ -1633,6 +1633,16 @@ function normalizeRecentRiderEntry(raw) {
   };
 }
 
+function getRecentRiderEntryKey(entry) {
+  if(!entry) return '';
+  if(entry.source === 'google-drive') {
+    return `google-drive:${String(entry.fileId || '').trim()}`;
+  }
+  const handleKey = String(entry.localHandleId || '').trim();
+  if(handleKey) return `local:${handleKey}`;
+  return `local:${String(entry.fileName || '').trim().toLowerCase()}`;
+}
+
 function supportsRecentLocalHandleStore() {
   return typeof indexedDB !== 'undefined';
 }
@@ -1756,14 +1766,10 @@ function loadRecentRiderFiles() {
 function addRecentRiderFile(entry) {
   const normalized = normalizeRecentRiderEntry(entry);
   if(!normalized) return;
-  const key = normalized.source === 'google-drive'
-    ? `google-drive:${normalized.fileId}`
-    : `local:${String(normalized.fileName || '').toLowerCase()}`;
+  const key = getRecentRiderEntryKey(normalized);
   const removedLocals = [];
   recentRiderFiles = recentRiderFiles.filter(item => {
-    const itemKey = item.source === 'google-drive'
-      ? `google-drive:${item.fileId}`
-      : `local:${String(item.fileName || '').toLowerCase()}`;
+    const itemKey = getRecentRiderEntryKey(item);
     if(itemKey === key && item.source === 'local' && item.localHandleId) {
       removedLocals.push(item.localHandleId);
     }
@@ -3436,7 +3442,11 @@ function renderStagePart(part) {
   el.classList.toggle('has-steps', !!part.hasSteps);
   positionWorldElement(el, part.x, part.y);
   const label = String(part.label || (part.shape === 'circle' ? 'ROOM CIRCLE' : 'ROOM'));
-  el.innerHTML = `<div class="part-label">${label}</div>`;
+  const labelEl = document.createElement('div');
+  labelEl.className = 'part-label';
+  labelEl.textContent = label;
+  el.textContent = '';
+  el.appendChild(labelEl);
 
   el.addEventListener('mousedown', e => {
     e.preventDefault();
@@ -8488,7 +8498,7 @@ function renderInstrument(instr) {
 function buildConnectionBoxPin(instr, key, label, baseLabel, extraClass = '', inlineStyle = '') {
   const used = isPinUsed(instr.id, key);
   const styleAttr = inlineStyle ? ` style="${inlineStyle}"` : '';
-  return `<div id="pin-${instr.id}-${key}" class="connbox-pin${extraClass}${used?' used':''}" data-pin="${key}" title="${buildPinTitle(instr, key, baseLabel)}"${styleAttr}>${label}</div>`;
+  return `<div id="pin-${instr.id}-${key}" class="connbox-pin${extraClass}${used?' used':''}" data-pin="${escapeHtml(String(key))}" title="${escapeHtml(buildPinTitle(instr, key, baseLabel))}"${styleAttr}>${escapeHtml(String(label))}</div>`;
 }
 
 function buildConnectionBoxHTML(instr, widthPx) {
@@ -14220,7 +14230,7 @@ function buildReportHTML(reportOptions = {}, autoPrint = false) {
     `;
   }).join('');
 
-  const diCount = instruments.filter(i => i && i.type === 'di').length;
+  const diCount = instruments.filter(i => i && i.type === 'di' && itemFilter(i)).length;
   const standDefinitions = INSTRUMENTS
     .filter(def => def && def.cat === 'stands')
     .map(def => ({
@@ -14229,7 +14239,7 @@ function buildReportHTML(reportOptions = {}, autoPrint = false) {
     }));
   const standUsage = new Map();
   instruments.forEach(instr => {
-    if(!instr || instr.cat !== 'stands') return;
+    if(!instr || instr.cat !== 'stands' || !itemFilter(instr)) return;
     const key = instr.type || 'stand';
     standUsage.set(key, (standUsage.get(key) || 0) + 1);
   });
@@ -15734,7 +15744,7 @@ function exportPNG() {
   const ctx=cv.getContext('2d'); ctx.scale(dpr,dpr);
   ctx.fillStyle='#0a0b0d'; ctx.fillRect(0,0,wr.width,wr.height);
   ctx.fillStyle=stageColor; ctx.strokeStyle=getStageBorderColor(stageColor); ctx.lineWidth=2;
-  ctx.beginPath(); ctx.roundRect(stagePx.left,stagePx.top,stagePx.width,stagePx.height,9); ctx.fill(); ctx.stroke();
+  roundRect(ctx,stagePx.left,stagePx.top,stagePx.width,stagePx.height,9); ctx.fill(); ctx.stroke();
   if(showStageStairs) {
     const stairsWidth = Math.min(stagePx.width, 2 * pxPerM);
     const stairsDepth = 0.75 * pxPerM;
@@ -15768,7 +15778,7 @@ function exportPNG() {
     ctx.translate(-cx, -cy);
     ctx.fillStyle=isSnakeBox(instr)?'#120f1a':'#1a1d24';
     ctx.strokeStyle=isSnakeBox(instr)?'#c47fff55':'#2a2e3a';
-    ctx.lineWidth=1.5; ctx.beginPath(); ctx.roundRect(ex+4,ey,bw,bw*.85,8); ctx.fill(); ctx.stroke();
+    ctx.lineWidth=1.5; roundRect(ctx,ex+4,ey,bw,bw*.85,8); ctx.fill(); ctx.stroke();
     ctx.font=Math.round(bw*.35)+'px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(instr.icon,ex+4+bw/2,ey+bw*.4);
     ctx.restore();
